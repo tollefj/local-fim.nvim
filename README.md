@@ -1,7 +1,6 @@
 # local-fim
 
-Local fill-in-the-middle completion for Neovim via a local
-[llama.cpp](https://github.com/ggml-org/llama.cpp) `llama-server`.
+Local fill-in-the-middle completion for Neovim via a local [llama.cpp](https://github.com/ggml-org/llama.cpp) `llama-server`.
 
 ## Requirements
 
@@ -27,7 +26,9 @@ Local fill-in-the-middle completion for Neovim via a local
 }
 ```
 
-## Commands and keymaps
+The port is set to 8012 to not conflict with the default 8080 in case of multiple local servers.
+
+## Keymaps
 
 | Command             | Default key | Action                          |
 | ------------------- | ----------- | ------------------------------- |
@@ -35,17 +36,13 @@ Local fill-in-the-middle completion for Neovim via a local
 | `:LocalFimDismiss`  | `<C-k>` (i) | Dismiss the current suggestion  |
 | `:LocalFimProfile`  | —           | Switch profile and (re)start it |
 
-Accept via your completion mapping, e.g. `<Tab>` through `fim.accept()`.
+Configure your own completion mapping. I use tab + ctrl-g.
 
 ## Profiles
 
-A profile is a parameter bundle for one model. Built-in profiles: `mellum2`,
-`mellum4b`, `qwen2.5-coder`. Profiles with a `server` field auto-start
-`llama-server` when needed. See [`lua/local-fim/profiles.lua`](lua/local-fim/profiles.lua)
-for the full list and defaults.
-
-To add a model, pass `opts.profiles` at setup. Declare only what differs from
-`profile_defaults`:
+A profile is a parameter bundle for one model.
+Profiles with a `server` field auto-start `llama-server` when needed. See [`lua/local-fim/profiles.lua`](lua/local-fim/profiles.lua).
+To add a model, pass `opts.profiles` at setup. Declare only what differs from `profile_defaults`:
 
 ```lua
 -- Qwen2.5-Coder 3B, infill mode (llama-server assembles the prompt)
@@ -67,8 +64,7 @@ opts = {
 
 ## Health
 
-`:checkhealth local-fim` resolves and validates the active profile, and checks
-that `llama-server` is reachable.
+`:checkhealth local-fim` validates the active profile, and checks that `llama-server` is reachable.
 
 ## License
 
