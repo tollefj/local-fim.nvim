@@ -1,13 +1,12 @@
 # local-fim
 
-Local fill-in-the-middle completion for Neovim, served by a local
-[llama.cpp](https://github.com/ggml-org/llama.cpp) `llama-server`. Ghost-text
-suggestions from per-model "profiles" you can swap at runtime.
+Local fill-in-the-middle completion for Neovim via a local
+[llama.cpp](https://github.com/ggml-org/llama.cpp) `llama-server`.
 
 ## Requirements
 
 - Neovim >= 0.10
-- `llama-server` on `PATH` ([llama.cpp](https://github.com/ggml-org/llama.cpp))
+- `llama-server` on `PATH`
 - `curl`
 
 ## Install (lazy.nvim)
@@ -23,7 +22,7 @@ suggestions from per-model "profiles" you can swap at runtime.
   config = function(_, opts)
     local fim = require("local-fim")
     fim.setup(opts)
-    require("local-fim.server").ensure(fim.config) -- offer to start llama-server if down
+    require("local-fim.server").ensure(fim.config)
   end,
 }
 ```
@@ -36,26 +35,31 @@ suggestions from per-model "profiles" you can swap at runtime.
 | `:LocalFimDismiss`  | `<C-k>` (i) | Dismiss the current suggestion  |
 | `:LocalFimProfile`  | —           | Switch profile and (re)start it |
 
-Accept is left to your completion mapping (e.g. `<Tab>` via `fim.accept()`).
+Accept via your completion mapping, e.g. `<Tab>` through `fim.accept()`.
 
 ## Profiles
 
-A profile is a parameter bundle for one model. Built-in: `mellum2` (default),
-`mellum4b`, `qwen2.5-coder`. Profiles with a `server` field can auto-start
-`llama-server`; the active profile's `mode` is `completion` (prompt built
-locally) or `infill` (delegated to `/infill`).
+A profile is a parameter bundle for one model. Built-in profiles: `mellum2`,
+`mellum4b`, `qwen2.5-coder`. Profiles with a `server` field auto-start
+`llama-server` when needed. See [`lua/local-fim/profiles.lua`](lua/local-fim/profiles.lua)
+for the full list and defaults.
 
-Add a model by editing `lua/local-fim/profiles.lua` (declare only what differs from
-`profile_defaults`) or pass `opts.profiles` at setup:
+To add a model, pass `opts.profiles` at setup. Declare only what differs from
+`profile_defaults`:
 
 ```lua
+-- Qwen2.5-Coder 3B, infill mode (llama-server assembles the prompt)
 opts = {
-  profile = "my-model",
+  profile = "qwen2.5-coder",
   profiles = {
-    ["my-model"] = {
+    ["qwen2.5-coder"] = {
       mode = "infill",
-      stop = { "<|endoftext|>" },
-      server = { model = { "-hf", "<user>/<repo>" }, ctx = 8192 },
+      top_p = 0.9,
+      stop = { "<|endoftext|>", "<|fim_pad|>", "<|file_sep|>", "<|repo_name|>" },
+      server = {
+        model = { "-hf", "ggml-org/Qwen2.5-Coder-3B-Q8_0-GGUF" },
+        ctx = 8192,
+      },
     },
   },
 }
@@ -63,8 +67,8 @@ opts = {
 
 ## Health
 
-`:checkhealth local-fim` reports the resolved profile, validates it, and checks that
-`llama-server` is reachable.
+`:checkhealth local-fim` resolves and validates the active profile, and checks
+that `llama-server` is reachable.
 
 ## License
 
