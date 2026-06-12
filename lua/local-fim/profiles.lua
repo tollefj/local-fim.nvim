@@ -47,10 +47,14 @@ M.profile_defaults = {
 
 ---@type table<string, local_fim.Profile>
 M.profiles = {
-  -- Local GGUF, no auto-start. To enable, add e.g.
-  --   server = { model = { "-m", "/path/to/mellum-4b.gguf" }, ctx = 8192 }.
+  -- Mellum-4b-dpo (StarCoder-tokenizer base), SPM FIM via the shared completion
+  -- builder. eos is <|endoftext|>; the <fim_*>/<filename> entries guard a runaway fill
   mellum4b = {
     stop = { "<fim_prefix>", "<fim_suffix>", "<fim_middle>", "<filename>", "<|endoftext|>" },
+    server = {
+      model = { "-hf", "JetBrains/Mellum-4b-dpo-all-gguf:Q8_0" },
+      ctx = 8192,
+    },
   },
   -- Mellum2 ...-Instruct, raw FIM (its tokenizer keeps the <fim_*> tokens).
   -- Its eos is <|im_end|>; <|endoftext|> is kept as a second guard.
