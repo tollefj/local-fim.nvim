@@ -1,0 +1,117 @@
+local M = {}
+
+-- The single in-flight request handle, if any. A new request cancels the
+-- previous one (debounce-by-cancel) so only the latest cursor position wins.
+M.job = nil
+local notified_down = false
+
+local function sampling(cfg)
+  return {
+    n_predict = cfg.n_predict,
+    temperature = cfg.temperature,
+    top_k = cfg.top_k,
+    top_p = cfg.top_p,
+    stop = cfg.stop,
+    cache_prompt = true,
+    t_max_predict_ms = cfg.t_max_predict_ms,
+    stream = false,
+  }
+end
+
+-- /infill: let llama-server assemble the FIM template from the model's own
+-- special tokens. Works only when the GGUF carries FIM-token metadata.
+local function infill_request(ctx, cfg)
+  local body = sampling(cfg)
+  body.input_prefix = ctx.prefix
+  body.input_suffix = ctx.suffix
+  body.prompt = ""
+  if ctx.extra and #ctx.extra > 0 then
+    body.input_extra = ctx.extra
+  end
+  return "/infill", body
+end
+
+-- /completion: build the model's exact SPM prompt ourselves. FIM marker
+-- strings come from cfg.tokens (per profile). Context files are prepended with
+-- the filename marker, then the current file in suffix/prefix/middle order.
+local function completion_request(ctx, cfg)
+  local t = cfg.tokens
+  local parts = {}
+  for _, e in ipairs(ctx.extra or {}) do
+    parts[#parts + 1] = t.filename .. e.filename .. "\n" .. e.text .. "\n\n"
+  end
+  parts[#parts + 1] = t.filename .. (ctx.filename or "") .. "\n"
+  parts[#parts + 1] = t.suffix .. ctx.suffix
+  parts[#parts + 1] = t.prefix .. ctx.prefix
+  parts[#parts + 1] = t.middle
+
+  local body = sampling(cfg)
+  body.prompt = table.concat(parts)
+  return "/completion", body
+end
+
+function M.cancel()
+  if M.job then
+    pcall(function()
+      M.job:kill(15)
+    end)
+    M.job = nil
+  end
+end
+
+-- POST a FIM request. Calls on_done(content) with the completion string on
+-- success, or on_done(nil, err) on failure. Endpoint and body shape are
+-- chosen by cfg.mode ("completion" | "infill").
+function M.infill(ctx, cfg, on_done)
+  M.cancel()
+
+  local path, body
+  if cfg.mode == "infill" then
+    path, body = infill_request(ctx, cfg)
+  else
+    path, body = completion_request(ctx, cfg)
+  end
+
+  local cmd = {
+    "curl",
+    "-s",
+    "--max-time",
+    tostring(cfg.request_timeout_ms / 1000),
+    "-X",
+    "POST",
+    cfg.endpoint .. path,
+    "-H",
+    "Content-Type: application/json",
+    "-d",
+    vim.json.encode(body),
+  }
+
+  M.job = vim.system(cmd, { text = true }, vim.schedule_wrap(function(res)
+    M.job = nil
+    if res.code ~= 0 or res.stdout == nil or res.stdout == "" then
+      if not notified_down then
+        notified_down = true
+        vim.notify(
+          ("local-fim: no response from %s (is llama-server running?)"):format(cfg.endpoint),
+          vim.log.levels.WARN
+        )
+      end
+      return on_done(nil, "request failed")
+    end
+    notified_down = false
+
+    local ok, decoded = pcall(vim.json.decode, res.stdout)
+    if not ok or type(decoded) ~= "table" then
+      return on_done(nil, "invalid json")
+    end
+    if decoded.error then
+      local msg = type(decoded.error) == "table" and decoded.error.message or tostring(decoded.error)
+      vim.notify("local-fim: server error: " .. msg, vim.log.levels.ERROR)
+      return on_done(nil, msg)
+    end
+
+    on_done(decoded.content or "")
+  end))
+end
+
+return M

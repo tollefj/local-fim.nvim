@@ -1,0 +1,50 @@
+*local-fim.txt*  Local fill-in-the-middle completion via llama-server
+
+==============================================================================
+INTRODUCTION                                                       *local-fim*
+
+Fill-in-the-middle completion served by a local llama.cpp
+`llama-server`. Behaviour is selected by per-model profiles.
+
+Requirements: Neovim >= 0.10, `llama-server` on PATH, `curl`.
+
+==============================================================================
+SETUP                                                        *local-fim-setup*
+
+>lua
+    local fim = require("local-fim")
+    fim.setup({ endpoint = "http://127.0.0.1:8012", profile = "qwen2.5-coder" })
+    require("local-fim.server").ensure(fim.config)
+<
+Options: `endpoint` (server URL), `profile` (active profile name),
+`profiles`, `keymaps`, `highlight`.
+
+==============================================================================
+PROFILES                                                  *local-fim-profiles*
+
+A profile is a parameter bundle for one model. Built-in: `mellum2` (default),
+`mellum4b`, `qwen2.5-coder`. A profile declares only what differs from
+`profile_defaults`; `mode` is "completion" (prompt built locally) or "infill"
+(delegated to /infill). A `server` field enables auto-start.
+
+Add models by editing lua/local-fim/profiles.lua or via `opts.profiles`.
+
+==============================================================================
+COMMANDS                                                  *local-fim-commands*
+
+:LocalFimComplete                                          *:LocalFimComplete*
+    Request a suggestion at the cursor. Default insert-mode key: <C-g>.
+
+:LocalFimDismiss                                            *:LocalFimDismiss*
+    Dismiss the current suggestion. Default insert-mode key: <C-k>.
+
+:LocalFimProfile                                            *:LocalFimProfile*
+    Pick a profile, switch to it, and (re)start its server.
+
+==============================================================================
+HEALTH                                                      *local-fim-health*
+
+`:checkhealth local-fim` reports the resolved profile, validates it, and checks
+that llama-server is reachable.
+
+vim:tw=78:ts=8:ft=help:norl:
