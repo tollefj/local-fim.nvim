@@ -54,13 +54,47 @@ opts = {
       top_p = 0.9,
       stop = { "<|endoftext|>", "<|fim_pad|>", "<|file_sep|>", "<|repo_name|>" },
       server = {
-        model = { "-hf", "ggml-org/Qwen2.5-Coder-3B-Q8_0-GGUF" },
+        hf = "ggml-org/Qwen2.5-Coder-3B-Q8_0-GGUF",
+        gguf = "qwen2.5-coder-3b-q8_0.gguf",
         ctx = 8192,
       },
     },
   },
 }
 ```
+
+## Model source
+
+A profile's `server` names the model in up to three ways:
+
+- `hf` — a HuggingFace repo (`<user>/<model>[:quant]`), loaded with `-hf` (auto-download).
+- `gguf` — a filename under `model_dir`, loaded with `-m <model_dir>/<gguf>`.
+- `model` — a raw `llama-server` arg list; if set, it is used verbatim and wins.
+
+Two top-level options decide which is used:
+
+```lua
+opts = {
+  source = "local",     -- "local" (default) or "hf"
+  model_dir = "~/LLM",  -- where local .gguf files live (~ expanded)
+}
+```
+
+`source` is only the tie-breaker when a profile provides **both** `hf` and `gguf`;
+the default `"local"` means a present local file is used over downloading. If a
+profile provides only one of the two, that one is used regardless of `source`
+(with a notice when it differs from your request). Override `source` or
+`model_dir` per profile by setting them at the profile's top level or inside its
+`server` block:
+
+```lua
+profiles = {
+  ["mellum2"] = { source = "hf" },  -- always pull this one from HuggingFace
+}
+```
+
+The built-in profiles ship with both `hf` and `gguf`, so by default they run from
+`model_dir` once the files are present, and fall back to HuggingFace otherwise.
 
 ## Health
 

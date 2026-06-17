@@ -6,8 +6,19 @@ function M.check()
   vim.health.start("local-fim")
   vim.health.info("profile: " .. tostring(cfg.profile))
   vim.health.info(("mode=%s n_predict=%s top_k=%s top_p=%s"):format(cfg.mode, cfg.n_predict, cfg.top_k, cfg.top_p))
-  if cfg.server and cfg.server.model then
-    vim.health.info("server: llama-server " .. table.concat(cfg.server.model, " ") .. " -c " .. tostring(cfg.server.ctx))
+  if cfg.server then
+    local margs, note = require("local-fim.server").model_args(cfg)
+    if margs then
+      vim.health.info("server: llama-server " .. table.concat(margs, " ") .. " -c " .. tostring(cfg.server.ctx))
+      if note then
+        vim.health.warn(note)
+      end
+      if margs[1] == "-m" and vim.fn.filereadable(margs[2]) == 0 then
+        vim.health.warn("local model file not found: " .. margs[2])
+      end
+    else
+      vim.health.error("server: " .. tostring(note))
+    end
   else
     vim.health.info("server: auto-start disabled (no `server` in profile)")
   end

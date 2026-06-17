@@ -13,6 +13,8 @@ M.profiles = vim.deepcopy(profiles.profiles)
 ---@class local_fim.Config: local_fim.Profile
 ---@field endpoint string            -- llama-server base URL
 ---@field profile string             -- active profile name
+---@field source "hf"|"local"        -- where to load the model from when a profile offers both
+---@field model_dir string           -- directory holding local .gguf files (~ expanded)
 ---@field request_timeout_ms integer
 ---@field max_prefix_lines integer
 ---@field max_suffix_lines integer
@@ -26,6 +28,13 @@ M.defaults = {
   -- Active profile from M.profiles. "completion" mode builds the SPM prompt
   -- locally; "infill" (a profile's `mode`) delegates to llama-server's /infill.
   profile = "mellum2",
+  -- Model source for profiles that declare both `hf` and `gguf`. "local" loads
+  -- `model_dir/<gguf>` with `-m` (preferred: use the local file if present);
+  -- "hf" pulls from HuggingFace (auto-download). Set per-profile (top-level or
+  -- inside `server`) to override. When a profile offers only one of the two,
+  -- that one is used regardless of `source`.
+  source = "local",
+  model_dir = "~/LLM",
   request_timeout_ms = 8000,
   max_prefix_lines = 80,
   max_suffix_lines = 40,
