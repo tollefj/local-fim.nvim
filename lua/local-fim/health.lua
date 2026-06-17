@@ -30,6 +30,15 @@ function M.check()
     vim.health.error("invalid profile: " .. err)
   end
 
+  if cfg.lsp and cfg.lsp.enabled then
+    local n = #vim.lsp.get_clients({ bufnr = 0 })
+    vim.health.info(
+      ("lsp context: enabled (%d client(s) on current buffer), budget=%d tokens"):format(n, cfg.max_extra_tokens)
+    )
+  else
+    vim.health.info("lsp context: disabled")
+  end
+
   if vim.fn.executable("curl") == 0 then
     vim.health.error("curl not found on PATH")
     return

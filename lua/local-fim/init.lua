@@ -18,7 +18,9 @@ M.profiles = vim.deepcopy(profiles.profiles)
 ---@field request_timeout_ms integer
 ---@field max_prefix_lines integer
 ---@field max_suffix_lines integer
+---@field max_extra_tokens integer  -- shared budget for the whole `extra` list (LSP defs + ring)
 ---@field ring { max_chunks: integer, chunk_lines: integer }
+---@field lsp { enabled: boolean, timeout_ms: integer, max_symbols: integer, max_def_lines: integer }
 ---@field keymaps { trigger: string|false, dismiss: string|false, accept: string|false }
 ---@field highlight string
 
@@ -38,9 +40,22 @@ M.defaults = {
   request_timeout_ms = 8000,
   max_prefix_lines = 80,
   max_suffix_lines = 40,
+  -- Token budget for cross-file context (LSP definitions + ring chunks),
+  -- approximated as ~4 chars/token. Kept small so the bulk of the model's
+  -- window stays available for prefix/suffix.
+  max_extra_tokens = 2048,
   ring = {
     max_chunks = 16,
     chunk_lines = 40,
+  },
+  -- Cross-file context pulled from the language server on each trigger: the
+  -- definitions of the symbols the cursor is typing against. Disable with
+  -- `lsp = { enabled = false }` to fall back to ring-only context.
+  lsp = {
+    enabled = true,
+    timeout_ms = 150, -- deadline before sending the request without (some) defs
+    max_symbols = 8, -- candidate positions resolved per trigger
+    max_def_lines = 30, -- per-definition line cap
   },
   keymaps = {
     trigger = "<C-g>",
@@ -54,13 +69,25 @@ M.defaults = {
 ---@type local_fim.Config
 M.config = vim.tbl_deep_extend("force", vim.deepcopy(M.defaults), profiles.resolve(M.profiles[M.defaults.profile]))
 
--- Request a completion for the current cursor position and show it as ghost text.
+-- Bumped on every trigger and on dismiss so a late async gather/LSP callback
+-- from a superseded request compares stale and drops instead of firing.
+M._gen = 0
+
+-- Request a completion for the current cursor position and show it as ghost
+-- text. Context gathering is async (LSP definition lookups), so the request is
+-- fired from the gather callback once cross-file context is ready.
 function M.complete()
-  local ctx = context.gather(M.config)
-  client.infill(ctx, M.config, function(content, _err)
-    if content and content ~= "" then
-      ui.show(content)
+  M._gen = M._gen + 1
+  local gen = M._gen
+  context.gather(M.config, function(ctx)
+    if gen ~= M._gen then
+      return
     end
+    client.infill(ctx, M.config, function(content, _err)
+      if content and content ~= "" then
+        ui.show(content)
+      end
+    end)
   end)
 end
 
@@ -73,6 +100,7 @@ function M.accept()
 end
 
 function M.dismiss()
+  M._gen = M._gen + 1 -- invalidate any in-flight gather/request
   client.cancel()
   ui.clear()
 end

@@ -96,6 +96,36 @@ profiles = {
 The built-in profiles ship with both `hf` and `gguf`, so by default they run from
 `model_dir` once the files are present, and fall back to HuggingFace otherwise.
 
+## Context
+
+Beyond the current buffer's prefix/suffix, the plugin feeds the model cross-file
+context in the `<filename>`-marked format these FIM models were trained on:
+
+- **LSP definitions** — on each trigger, the definitions of the symbols the
+  cursor is typing against are resolved via the language server and their
+  enclosing code regions are included. This is the highest-signal context (the
+  exact APIs you are calling). Lookups are async with a hard deadline, so a slow
+  or missing server never blocks a suggestion.
+- **Ring buffer** — recently visited files fill whatever budget remains.
+
+Both share one token budget, with LSP definitions taking priority and placed
+nearest the completion point. Defaults:
+
+```lua
+opts = {
+  max_extra_tokens = 2048,  -- shared budget for all cross-file context (~4 chars/token)
+  lsp = {
+    enabled = true,
+    timeout_ms = 150,   -- deadline before sending without (some) definitions
+    max_symbols = 8,    -- candidate symbols resolved per trigger
+    max_def_lines = 30, -- per-definition line cap
+  },
+}
+```
+
+Set `lsp = { enabled = false }` to use ring-only context. When no language
+server is attached to the buffer, the plugin silently falls back to the ring.
+
 ## Health
 
 `:checkhealth local-fim` validates the active profile, and checks that `llama-server` is reachable.

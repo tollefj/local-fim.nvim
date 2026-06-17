@@ -50,11 +50,55 @@ function M.capture(bufnr, cfg)
   end
 end
 
--- Build the FIM context for the current cursor position:
+local function entry_len(filename, text)
+  return #filename + #text + 4 -- markers + newlines, roughly
+end
+
+-- Merge LSP definitions with ring chunks under one ~token budget. LSP entries
+-- get first claim (highest relevance); ring chunks fill the remainder, skipping
+-- the current file and any file an LSP entry already covers. The returned list
+-- is ordered [ring..., LSP...] so the most relevant context sits last, nearest
+-- the FIM region in the assembled prompt.
+local function assemble_extra(lsp_entries, current, cfg)
+  local budget = (cfg.max_extra_tokens or 2048) * 4
+  local used, seen = 0, {}
+  local lsp_keep = {}
+  for _, e in ipairs(lsp_entries) do
+    local len = entry_len(e.filename, e.text)
+    if used + len <= budget then
+      lsp_keep[#lsp_keep + 1] = e
+      used = used + len
+      seen[e.filename] = true
+    end
+  end
+
+  local ring_keep = {}
+  for _, chunk in ipairs(M.chunks) do
+    if chunk.filename ~= current and not seen[chunk.filename] then
+      local len = entry_len(chunk.filename, chunk.text)
+      if used + len <= budget then
+        ring_keep[#ring_keep + 1] = { filename = chunk.filename, text = chunk.text }
+        used = used + len
+      end
+    end
+  end
+
+  local extra = {}
+  for _, e in ipairs(ring_keep) do
+    extra[#extra + 1] = e
+  end
+  for _, e in ipairs(lsp_keep) do
+    extra[#extra + 1] = e
+  end
+  return extra
+end
+
+-- Build the FIM context for the current cursor position and pass it to
+-- `callback` (async, because LSP definition lookups are async):
 --   prefix : text before the cursor (current line + up to max_prefix_lines above)
 --   suffix : text after the cursor  (current line + up to max_suffix_lines below)
---   extra  : ring-buffer chunks from other files (current file excluded)
-function M.gather(cfg)
+--   extra  : LSP definitions for nearby symbols + ring-buffer chunks, budgeted
+function M.gather(cfg, callback)
   local bufnr = vim.api.nvim_get_current_buf()
   local row, col = unpack(vim.api.nvim_win_get_cursor(0)) -- row is 1-based
   row = row - 1
@@ -74,14 +118,10 @@ function M.gather(cfg)
   end
 
   local current = relpath(bufnr)
-  local extra = {}
-  for _, chunk in ipairs(M.chunks) do
-    if chunk.filename ~= current then
-      table.insert(extra, { filename = chunk.filename, text = chunk.text })
-    end
-  end
-
-  return { prefix = prefix, suffix = suffix, extra = extra, filename = current }
+  require("local-fim.lsp_context").collect(cfg, bufnr, row, col, function(lsp_entries)
+    local extra = assemble_extra(lsp_entries, current, cfg)
+    callback({ prefix = prefix, suffix = suffix, extra = extra, filename = current })
+  end)
 end
 
 return M
