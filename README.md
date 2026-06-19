@@ -106,6 +106,11 @@ context in the `<filename>`-marked format these FIM models were trained on:
   enclosing code regions are included. This is the highest-signal context (the
   exact APIs you are calling). Lookups are async with a hard deadline, so a slow
   or missing server never blocks a suggestion.
+- **Member-access types** — when you trigger right after a member operator
+  (`transport.`, `a?.b`, `p->x`, `T::y`), the *type* of the receiver is resolved
+  (`textDocument/typeDefinition`) and its class/interface region is included and
+  placed nearest the completion point, so the model sees the members available
+  on `transport`.
 - **Ring buffer** — recently visited files fill whatever budget remains.
 
 Both share one token budget, with LSP definitions taking priority and placed

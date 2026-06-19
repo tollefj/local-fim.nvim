@@ -97,6 +97,25 @@ local function dedupe_and_cap(positions, cap)
   return out
 end
 
+-- When the cursor sits just after a member operator (`transport.`, `a?.b`,
+-- `p->x`, `T::y`), recover the receiver identifier and its position so we can
+-- resolve its *type* and feed the model the members available on it. The line
+-- may be mid-edit (a partially typed member), so this scans text rather than
+-- the syntax tree. Returns { row, col, name } or nil.
+local function member_receiver(bufnr, row, col)
+  local line = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1] or ""
+  local before = line:sub(1, col):gsub("[%w_]*$", "") -- drop the partial member being typed
+  if not (before:match("%.%s*$") or before:match("%-%>%s*$") or before:match("::%s*$")) then
+    return nil
+  end
+  local recv = before:gsub("[%s%.:>%-%?]*$", "") -- strip the operator and trailing space
+  local s = recv:find("[%w_]+$")
+  if not s then
+    return nil -- receiver is not a plain identifier (e.g. a call result)
+  end
+  return { row = row, col = s - 1, name = recv:sub(s) }
+end
+
 -- A definition result may be a Location or a LocationLink. Pull the target uri
 -- and the start of the most specific range we have.
 local function loc_target(loc)
@@ -143,10 +162,11 @@ local function enclosing_text(tbuf, defrow, defcol, cfg)
 end
 
 -- Turn raw definition locations into deduped { filename, text } entries. Skips
--- targets in the source buffer (already covered by prefix/suffix in v1).
-local function build_entries(locs, src_bufnr, cfg)
+-- targets in the source buffer (already covered by prefix/suffix in v1). `seen`
+-- is shared across calls so a type-def doesn't duplicate a plain def.
+local function build_entries(locs, src_bufnr, cfg, seen)
   local src_name = vim.api.nvim_buf_get_name(src_bufnr)
-  local entries, seen = {}, {}
+  local entries = {}
   for _, loc in ipairs(locs) do
     local uri, drow, dcol = loc_target(loc)
     if uri then
@@ -177,30 +197,48 @@ function M.collect(cfg, bufnr, row, col, callback)
     return callback({})
   end
 
+  -- Definitions for the nearby identifiers, plus the *type* definition of a
+  -- member-access receiver so the model sees what `receiver.` can call.
   local positions = dedupe_and_cap(candidate_positions(bufnr, row, col, cfg), cfg.lsp.max_symbols)
-  if #positions == 0 then
+  local requests = {}
+  for _, pos in ipairs(positions) do
+    requests[#requests + 1] = { method = "textDocument/definition", pos = pos, type = false }
+  end
+  local receiver = member_receiver(bufnr, row, col)
+  if receiver then
+    requests[#requests + 1] = { method = "textDocument/typeDefinition", pos = receiver, type = true }
+  end
+  if #requests == 0 then
     return callback({})
   end
 
-  local locs = {}
-  local pending = #positions
+  local def_locs, type_locs = {}, {}
+  local pending = #requests
   local done = false
   local function finish()
     if done then
       return
     end
     done = true
-    callback(build_entries(locs, bufnr, cfg))
+    -- Shared dedupe; type-def entries come last so the receiver's members sit
+    -- nearest the FIM region in the assembled prompt.
+    local seen = {}
+    local entries = build_entries(def_locs, bufnr, cfg, seen)
+    for _, e in ipairs(build_entries(type_locs, bufnr, cfg, seen)) do
+      entries[#entries + 1] = e
+    end
+    callback(entries)
   end
 
   vim.defer_fn(finish, cfg.lsp.timeout_ms)
 
-  for _, pos in ipairs(positions) do
+  for _, req in ipairs(requests) do
+    local bucket = req.type and type_locs or def_locs
     local params = {
       textDocument = vim.lsp.util.make_text_document_params(bufnr),
-      position = { line = pos.row, character = pos.col },
+      position = { line = req.pos.row, character = req.pos.col },
     }
-    vim.lsp.buf_request_all(bufnr, "textDocument/definition", params, function(res)
+    vim.lsp.buf_request_all(bufnr, req.method, params, function(res)
       for _, r in pairs(res or {}) do
         local result = r.result
         if result then
@@ -208,7 +246,7 @@ function M.collect(cfg, bufnr, row, col, callback)
             result = { result }
           end
           for _, loc in ipairs(result) do
-            locs[#locs + 1] = loc
+            bucket[#bucket + 1] = loc
           end
         end
       end
