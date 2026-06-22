@@ -1,0 +1,28 @@
+# case: totals   profile: qwen2.5-coder   mode: infill   endpoint: http://127.0.0.1:8012
+# deps: totals_deps.py
+
+=== prompt without deps ===
+<|repo_name|>myproject
+<|file_sep|>filename
+<|fim_prefix|>from totals_deps import line_total
+
+
+def invoice_total(items: list[dict]) -> float:
+    return sum(<|fim_suffix|> for item in items)<|fim_middle|>
+
+=== prompt with totals_deps.py ===
+<|repo_name|>myproject
+<|file_sep|>totals_deps.py
+def line_total(item: dict) -> float:
+    return item["price"] * item["qty"] * (1 - item["discount"])<|file_sep|>filename
+<|fim_prefix|>from totals_deps import line_total
+
+
+def invoice_total(items: list[dict]) -> float:
+    return sum(<|fim_suffix|> for item in items)<|fim_middle|>
+
+=== completion without deps ===
+line_total(item)
+
+=== completion with totals_deps.py ===
+line_total(item)

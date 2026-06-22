@@ -59,9 +59,11 @@ function M.cancel()
   end
 end
 
--- POST a FIM request. Calls on_done(content) with the completion string on
--- success, or on_done(nil, err) on failure. Endpoint and body shape are
--- chosen by cfg.mode ("completion" | "infill").
+-- POST a FIM request. Calls on_done(content, nil, meta) with the completion
+-- string on success, or on_done(nil, err) on failure. `meta` carries the
+-- request body we sent and the full decoded server response (which, in
+-- llama.cpp, includes the assembled `prompt`); production callers can ignore
+-- it. Endpoint and body shape are chosen by cfg.mode ("completion" | "infill").
 function M.infill(ctx, cfg, on_done)
   M.cancel()
 
@@ -110,7 +112,7 @@ function M.infill(ctx, cfg, on_done)
       return on_done(nil, msg)
     end
 
-    on_done(decoded.content or "")
+    on_done(decoded.content or "", nil, { request = body, response = decoded })
   end))
 end
 
