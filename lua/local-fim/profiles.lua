@@ -54,22 +54,22 @@ M.profile_defaults = {
 ---@type table<string, local_fim.Profile>
 M.profiles = {
   -- Mellum-4b-dpo (StarCoder-tokenizer base), SPM FIM via the shared completion
-  -- builder. eos is <|endoftext|>; the <fim_*>/<filename> entries guard a runaway fill
+  -- builder. eos is <|endoftext|>; the <fim_*>/<filename> entries guard a runaway fill.
+  -- hf-only: demonstrates the `-hf` load path (no local gguf).
   mellum4b = {
     stop = { "<fim_prefix>", "<fim_suffix>", "<fim_middle>", "<filename>", "<|endoftext|>" },
     server = {
       hf = "JetBrains/Mellum-4b-dpo-all-gguf:Q8_0",
-      gguf = "mellum-4b-dpo-all.Q8_0.gguf",
       ctx = 8192,
     },
   },
   -- Mellum2 ...-Instruct, raw FIM (its tokenizer keeps the <fim_*> tokens).
   -- Its eos is <|im_end|>; <|endoftext|> is kept as a second guard.
+  -- hf-only: demonstrates the `-hf` load path (no local gguf).
   mellum2 = {
     stop = { "<fim_prefix>", "<fim_suffix>", "<fim_middle>", "<filename>", "<|im_end|>", "<|endoftext|>" },
     server = {
       hf = "JetBrains/Mellum2-12B-A2.5B-Instruct-GGUF-Q6_K:Q6_K",
-      gguf = "Mellum2-12B-A2.5B-Instruct-Q6_K.gguf",
       ctx = 8192,
     },
   },
@@ -86,6 +86,22 @@ M.profiles = {
     server = {
       hf = "ggml-org/Qwen2.5-Coder-3B-Q8_0-GGUF",
       gguf = "qwen2.5-coder-3b-q8_0.gguf",
+      source = "local",
+      ctx = 8192,
+    },
+  },
+  -- Qwen3.5-4B, same Qwen FIM tokenizer family as qwen2.5-coder (fim_prefix/
+  -- middle/suffix/pad kept as real tokens, PSM order) so it uses the same
+  -- "infill" delegation. Local-only GGUF: no known hf repo, so `gguf` is the
+  -- only source and `source` is pinned to "local" regardless of the global
+  -- default. ctx assumed at 8192 to match the other profiles.
+  ["qwen3.5-4b"] = {
+    mode = "infill",
+    top_p = 0.9,
+    stop = { "<|endoftext|>", "<|fim_pad|>", "<|file_sep|>", "<|repo_name|>" },
+    server = {
+      gguf = "Qwen3.5-4B-Q6_K.gguf",
+      source = "local",
       ctx = 8192,
     },
   },

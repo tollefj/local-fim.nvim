@@ -13,7 +13,7 @@ SETUP                                                        *local-fim-setup*
 
 >lua
     local fim = require("local-fim")
-    fim.setup({ endpoint = "http://127.0.0.1:8012", profile = "qwen2.5-coder" })
+    fim.setup({ endpoint = "http://127.0.0.1:8012", profile = "qwen3.5-4b" })
     require("local-fim.server").ensure(fim.config)
 <
 Options: `endpoint` (server URL), `profile` (active profile name),
@@ -22,8 +22,8 @@ Options: `endpoint` (server URL), `profile` (active profile name),
 ==============================================================================
 PROFILES                                                  *local-fim-profiles*
 
-A profile is a parameter bundle for one model. Built-in: `mellum2` (default),
-`mellum4b`, `qwen2.5-coder`. A profile declares only what differs from
+A profile is a parameter bundle for one model. Built-in: `qwen3.5-4b`
+(default), `mellum2`, `mellum4b`, `qwen2.5-coder`. A profile declares only what differs from
 `profile_defaults`; `mode` is "completion" (prompt built locally) or "infill"
 (delegated to /infill). A `server` field enables auto-start.
 

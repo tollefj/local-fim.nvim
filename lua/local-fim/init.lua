@@ -29,7 +29,7 @@ M.defaults = {
   endpoint = "http://127.0.0.1:8012",
   -- Active profile from M.profiles. "completion" mode builds the SPM prompt
   -- locally; "infill" (a profile's `mode`) delegates to llama-server's /infill.
-  profile = "mellum2",
+  profile = "qwen3.5-4b",
   -- Model source for profiles that declare both `hf` and `gguf`. "local" loads
   -- `model_dir/<gguf>` with `-m` (preferred: use the local file if present);
   -- "hf" pulls from HuggingFace (auto-download). Set per-profile (top-level or

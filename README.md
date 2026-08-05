@@ -16,7 +16,7 @@ fill-in-the-middle completion for Neovim via a local [llama.cpp](https://github.
   event = "VimEnter",
   opts = {
     endpoint = "http://127.0.0.1:8012",
-    profile = "qwen2.5-coder",
+    profile = "qwen3.5-4b",
   },
   config = function(_, opts)
     local fim = require("local-fim")
@@ -63,12 +63,51 @@ opts = {
 }
 ```
 
+## FIM tokens
+
+Every profile's `stop` list and (for `mode = "completion"`) `tokens` table
+must match the exact marker strings the model was trained on — copied from
+its tokenizer, not guessed. Two token families are in use by the built-in
+profiles:
+
+| Role                | Mellum (`<fim_prefix>` style)        | Qwen (`<\|fim_prefix\|>` style)     |
+| ------------------- | ------------------------------------- | ------------------------------------ |
+| before the gap      | `<fim_prefix>`                        | `<\|fim_prefix\|>`                   |
+| after the gap       | `<fim_suffix>`                        | `<\|fim_suffix\|>`                   |
+| generate here       | `<fim_middle>`                        | `<\|fim_middle\|>`                   |
+| batch padding       | —                                      | `<\|fim_pad\|>`                      |
+| end of generation   | `<\|endoftext\|>` / `<\|im_end\|>`    | `<\|endoftext\|>`                    |
+
+- `mode = "completion"` (Mellum profiles) — this plugin assembles the prompt
+  itself using a profile's `tokens` table, so the prefix/suffix/middle
+  strings above must be set there exactly.
+- `mode = "infill"` (Qwen profiles) — `llama-server`'s `/infill` endpoint
+  reads the FIM marker strings out of the GGUF's own metadata and assembles
+  the prompt itself; `tokens` is ignored, so only `stop` matters here.
+
+`stop` always needs the model's actual end-of-generation token(s), plus every
+FIM/structural marker that could otherwise leak into visible output if the
+model degenerates mid-completion:
+
+- `<|fim_pad|>` — a training-time alignment token (pads short examples out to
+  a uniform batch length); harmless if it never appears, but stops generation
+  immediately if it does.
+- `<|file_sep|>` / `<|repo_name|>` (Qwen2.5-Coder-family only) — mark the
+  start of a new file or repo block in Qwen's multi-file pretraining format.
+  If the model emits one of these mid-completion, it has stopped continuing
+  your code and started hallucinating a new file/repo header; treating them
+  as stop tokens cuts that off before it gets spliced into your buffer.
+
+When adding a model, pull these strings from its `tokenizer_config.json` /
+`special_tokens_map.json` rather than assuming they match an existing
+profile's family — see `.claude/skills/integrate-fim-model/SKILL.md`.
+
 ## Model source
 
 A profile's `server` names the model in up to three ways:
 
 - `hf` — a HuggingFace repo (`<user>/<model>[:quant]`), loaded with `-hf` (auto-download).
-- `gguf` — a filename under `model_dir`, loaded with `-m <model_dir>/<gguf>`.
+- `gguf` — a filename under `model_dir` (defaults to ~/LLM), loaded with `-m <model_dir>/<gguf>`.
 - `model` — a raw `llama-server` arg list; if set, it is used verbatim and wins.
 
 Two top-level options decide which is used:
@@ -93,8 +132,10 @@ profiles = {
 }
 ```
 
-The built-in profiles ship with both `hf` and `gguf`, so by default they run from
+Most built-in profiles ship with both `hf` and `gguf`, so by default they run from
 `model_dir` once the files are present, and fall back to HuggingFace otherwise.
+`qwen3.5-4b` is local-only (no known `hf` repo for this GGUF), so it always
+loads from `model_dir` regardless of `source`.
 
 ## Context
 
