@@ -1,6 +1,6 @@
 # local-fim
 
-Local fill-in-the-middle completion for Neovim via a local [llama.cpp](https://github.com/ggml-org/llama.cpp) `llama-server`.
+fill-in-the-middle completion for Neovim via a local [llama.cpp](https://github.com/ggml-org/llama.cpp) `llama-server`.
 
 ## Requirements
 
@@ -32,9 +32,9 @@ The port is set to 8012 to not conflict with the default 8080 in case of multipl
 
 | Command             | Default key | Action                          |
 | ------------------- | ----------- | ------------------------------- |
-| `:LocalFimComplete` | `<C-g>` (i) | Request a suggestion            |
-| `:LocalFimDismiss`  | `<C-k>` (i) | Dismiss the current suggestion  |
-| `:LocalFimProfile`  | —           | Switch profile and (re)start it |
+| `:LocalFimComplete` | `<C-g>` (i) | generate            |
+| `:LocalFimDismiss`  | `<C-k>` (i) | dismiss | 
+| `:LocalFimProfile`  | —           | switch profile and (re)start it |
 
 Configure your own completion mapping. I use tab + ctrl-g.
 
