@@ -11,23 +11,46 @@ Requirements: Neovim >= 0.10, `llama-server` on PATH, `curl`.
 ==============================================================================
 SETUP                                                        *local-fim-setup*
 
+This plugin ships no built-in profiles: `profile` and `profiles` are
+required. See README.md for ready-to-copy examples (Mellum, Qwen2.5-Coder,
+Qwen3.5).
+
 >lua
     local fim = require("local-fim")
-    fim.setup({ endpoint = "http://127.0.0.1:8012", profile = "qwen3.5-4b" })
+    fim.setup({
+      endpoint = "http://127.0.0.1:8012",
+      profile = "qwen2.5-coder",
+      profiles = {
+        ["qwen2.5-coder"] = {
+          mode = "infill",
+          stop = { "<|endoftext|>", "<|fim_pad|>", "<|file_sep|>",
+                   "<|repo_name|>" },
+          server = {
+            hf = "ggml-org/Qwen2.5-Coder-3B-Q8_0-GGUF",
+            gguf = "qwen2.5-coder-3b-q8_0.gguf",
+            ctx = 8192,
+          },
+        },
+      },
+    })
     require("local-fim.server").ensure(fim.config)
 <
-Options: `endpoint` (server URL), `profile` (active profile name),
-`profiles`, `keymaps`, `highlight`.
+Options: `endpoint` (server URL), `profile` (active profile name, a key in
+`profiles`), `profiles`, `keymaps`, `highlight`.
 
 ==============================================================================
 PROFILES                                                  *local-fim-profiles*
 
-A profile is a parameter bundle for one model. Built-in: `qwen3.5-4b`
-(default), `mellum2`, `mellum4b`, `qwen2.5-coder`. A profile declares only what differs from
-`profile_defaults`; `mode` is "completion" (prompt built locally) or "infill"
-(delegated to /infill). A `server` field enables auto-start.
+A profile is a parameter bundle for one model, passed via `opts.profiles` at
+setup(). It declares only what differs from `profile_defaults`
+(lua/local-fim/profiles.lua); `mode` is "completion" (prompt built locally)
+or "infill" (delegated to /infill). A `server` field enables auto-start.
+Repetition-control fields (`dry_multiplier`, `dry_allowed_length`,
+`dry_penalty_last_n`, `dry_sequence_breakers`, `repeat_penalty`) are optional
+and, when set, passed straight through to llama-server's sampler.
 
-Add models by editing lua/local-fim/profiles.lua or via `opts.profiles`.
+Example profiles for the Mellum and Qwen2.5-Coder/Qwen3.5 tokenizer families
+live in the README's "Profiles" section and in tests/fim/profiles.lua.
 
 ==============================================================================
 COMMANDS                                                  *local-fim-commands*
