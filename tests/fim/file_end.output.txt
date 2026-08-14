@@ -1,0 +1,21 @@
+# case: file_end   profile: qwen2.5-coder   mode: infill   endpoint: http://127.0.0.1:8012
+# deps: 0 dep file(s)
+
+=== prompt without deps ===
+<|repo_name|>myproject
+<|file_sep|>filename
+<|fim_prefix|>def is_palindrome(s: str) -> bool:
+    <|fim_suffix|><|fim_middle|>
+
+=== prompt with 0 dep file(s) ===
+[unavailable]
+
+=== completion without deps ===
+return s == s[::-1]
+
+issues: none
+
+=== completion with 0 dep file(s) ===
+[skipped] no deps
+
+issues: none

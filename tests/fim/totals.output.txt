@@ -24,5 +24,9 @@ def invoice_total(items: list[dict]) -> float:
 === completion without deps ===
 line_total(item)
 
+issues: none
+
 === completion with totals_deps.py ===
 line_total(item)
+
+issues: none

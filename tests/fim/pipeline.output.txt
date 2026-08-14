@@ -60,6 +60,10 @@ def main() -> None:
 === completion without deps ===
 send("hello")
 
+issues: none
+
 === completion with 3 dep file(s) ===
 exchange("hello")
     session.close()
+
+issues: none

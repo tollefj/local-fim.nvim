@@ -41,5 +41,9 @@ if __name__ == "__main__":
 === completion without deps ===
 greet()
 
+issues: none
+
 === completion with greet_deps.py ===
 greeting()
+
+issues: none
