@@ -27,9 +27,11 @@ M.profiles = vim.deepcopy(profiles.profiles)
 -- Editor-side configuration, shared across every profile.
 M.defaults = {
   endpoint = "http://127.0.0.1:8012",
-  -- Active profile from M.profiles. "completion" mode builds the SPM prompt
-  -- locally; "infill" (a profile's `mode`) delegates to llama-server's /infill.
-  profile = "qwen3.5-4b",
+  -- No default: this plugin ships no built-in profiles (see profiles.lua), so
+  -- you must pass `profile` (a key in your own `opts.profiles`) at setup().
+  -- "completion" mode builds the SPM prompt locally; "infill" (a profile's
+  -- `mode`) delegates to llama-server's /infill.
+  profile = nil,
   -- Model source for profiles that declare both `hf` and `gguf`. "local" loads
   -- `model_dir/<gguf>` with `-m` (preferred: use the local file if present);
   -- "hf" pulls from HuggingFace (auto-download). Set per-profile (top-level or
@@ -65,9 +67,11 @@ M.defaults = {
   highlight = "Comment",
 }
 
--- Resolved flat config (defaults + active profile). Populated by setup().
+-- Resolved flat config (defaults + active profile). Placeholder until
+-- setup() runs with a real `profile`/`profiles` pair -- there's no built-in
+-- profile to merge in here.
 ---@type local_fim.Config
-M.config = vim.tbl_deep_extend("force", vim.deepcopy(M.defaults), profiles.resolve(M.profiles[M.defaults.profile]))
+M.config = vim.tbl_deep_extend("force", vim.deepcopy(M.defaults), profiles.resolve(nil))
 
 -- Bumped on every trigger and on dismiss so a late async gather/LSP callback
 -- from a superseded request compares stale and drops instead of firing.
@@ -180,25 +184,24 @@ function M.setup(opts)
   local available = vim.tbl_deep_extend("force", vim.deepcopy(profiles.profiles), opts.profiles or {})
   M.profiles = available
 
-  local name = opts.profile or M.defaults.profile
-  if not available[name] then
+  -- No built-in profiles ship with this plugin (see profiles.lua), so a valid
+  -- `profile` must name a key in `opts.profiles`. There's no sensible
+  -- fallback to limp along on -- bail out loudly instead of half-initializing
+  -- with an empty profile.
+  local name = opts.profile
+  if name == nil or not available[name] then
     vim.notify(
-      ("local-fim: unknown profile %q; falling back to %q"):format(tostring(name), M.defaults.profile),
+      ("local-fim: unknown profile %q; set `profile` + `profiles` in setup() (see README)"):format(tostring(name)),
       vim.log.levels.ERROR
     )
-    name = M.defaults.profile
+    return
   end
 
-  -- Resolve (profile_defaults < profile) and validate; fall back on a bad one.
   local active = profiles.resolve(available[name])
   local ok, err = profiles.validate(active)
   if not ok then
-    vim.notify(
-      ("local-fim: profile %q invalid: %s; falling back to %q"):format(name, err, M.defaults.profile),
-      vim.log.levels.ERROR
-    )
-    name = M.defaults.profile
-    active = profiles.resolve(available[name])
+    vim.notify(("local-fim: profile %q invalid: %s"):format(name, err), vim.log.levels.ERROR)
+    return
   end
 
   -- Precedence: global defaults < active profile < user opts. `profile` and

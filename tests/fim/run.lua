@@ -17,18 +17,21 @@
 -- looping on a line already present after the cursor). Issues are written
 -- inline in the .output.txt and summarized to stdout at the end of the run.
 --
--- Requires a llama-server already running at the profile's endpoint.
+-- Requires a llama-server already running at the profile's endpoint. Profiles
+-- come from tests/fim/profiles.lua (the plugin itself ships none -- see
+-- lua/local-fim/profiles.lua); default is "qwen2.5-coder", override with
+-- LOCAL_FIM_PROFILE.
 --
 -- Usage (from the repo root):
---   nvim --headless -l tests/fim/run.lua            # all cases
+--   nvim --headless -l tests/fim/run.lua            # all cases, qwen2.5-coder
 --   nvim --headless -l tests/fim/run.lua greet      # one case
---   LOCAL_FIM_PROFILE=qwen2.5-coder nvim --headless -l tests/fim/run.lua
+--   LOCAL_FIM_PROFILE=qwen3.5-4b nvim --headless -l tests/fim/run.lua
 --
 -- All profiles share one endpoint by default (you swap the loaded model
 -- locally and point `profile` at the matching bundle) -- to compare two
 -- models side by side, run a second llama-server on another port and point
 -- this harness at it with LOCAL_FIM_ENDPOINT:
---   LOCAL_FIM_PROFILE=qwen2.5-coder LOCAL_FIM_ENDPOINT=http://127.0.0.1:8013 \
+--   LOCAL_FIM_PROFILE=qwen3.5-4b LOCAL_FIM_ENDPOINT=http://127.0.0.1:8013 \
 --     nvim --headless -l tests/fim/run.lua
 
 local src = debug.getinfo(1, "S").source:sub(2)
@@ -36,12 +39,25 @@ local here = vim.fn.fnamemodify(src, ":p:h")
 local root = vim.fn.fnamemodify(here, ":h:h")
 vim.opt.runtimepath:append(root)
 
+-- The plugin ships no built-in profiles (see lua/local-fim/profiles.lua) --
+-- this harness uses the example profiles in tests/fim/profiles.lua (the same
+-- ones documented in the README) so it has something concrete to run
+-- against without requiring your personal Neovim config.
+local example_profiles = dofile(here .. "/profiles.lua")
+
 local fim = require("local-fim")
 fim.setup({
-  profile = vim.env.LOCAL_FIM_PROFILE or fim.defaults.profile,
+  profile = vim.env.LOCAL_FIM_PROFILE or "qwen2.5-coder",
+  profiles = example_profiles,
   endpoint = vim.env.LOCAL_FIM_ENDPOINT,
 })
 local cfg = fim.config
+if not cfg.stop then
+  error(
+    ("no such profile %q in tests/fim/profiles.lua"):format(vim.env.LOCAL_FIM_PROFILE or "qwen2.5-coder"),
+    0
+  )
+end
 local client = require("local-fim.client")
 
 local function read_file(path)

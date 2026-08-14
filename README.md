@@ -10,13 +10,30 @@ fill-in-the-middle completion for Neovim via a local [llama.cpp](https://github.
 
 ## Install (lazy.nvim)
 
+This plugin ships with no built-in profiles — model paths, quant choices, and
+sampling tweaks are personal to your machine, not something to hardcode in a
+published package. Pick one of the ready-to-copy profiles from
+[Profiles](#profiles) below (or write your own) and pass it as `opts.profiles`:
+
 ```lua
 {
   "tollefj/local-fim.nvim",
   event = "VimEnter",
   opts = {
     endpoint = "http://127.0.0.1:8012",
-    profile = "qwen3.5-4b",
+    profile = "qwen2.5-coder",
+    profiles = {
+      ["qwen2.5-coder"] = {
+        mode = "infill",
+        top_p = 0.9,
+        stop = { "<|endoftext|>", "<|fim_pad|>", "<|file_sep|>", "<|repo_name|>" },
+        server = {
+          hf = "ggml-org/Qwen2.5-Coder-3B-Q8_0-GGUF",
+          gguf = "qwen2.5-coder-3b-q8_0.gguf",
+          ctx = 8192,
+        },
+      },
+    },
   },
   config = function(_, opts)
     local fim = require("local-fim")
@@ -40,15 +57,23 @@ Configure your own completion mapping. I use tab + ctrl-g.
 
 ## Profiles
 
-A profile is a parameter bundle for one model.
-Profiles with a `server` field auto-start `llama-server` when needed. See [`lua/local-fim/profiles.lua`](lua/local-fim/profiles.lua).
-To add a model, pass `opts.profiles` at setup. Declare only what differs from `profile_defaults`:
+A profile is a parameter bundle for one model. The plugin itself defines only
+the mechanics — `profile_defaults`, `resolve`, `validate` in
+[`lua/local-fim/profiles.lua`](lua/local-fim/profiles.lua) — and ships no
+concrete models. Pass yours as `opts.profiles` at setup, declaring only what
+differs from `profile_defaults`; profiles with a `server` field auto-start
+`llama-server` when needed via `:LocalFimProfile` or
+`require("local-fim.server").ensure(...)`.
+
+The same set of examples also lives at
+[`tests/fim/profiles.lua`](tests/fim/profiles.lua), used by the eval harness:
 
 ```lua
--- Qwen2.5-Coder 3B, infill mode (llama-server assembles the prompt)
 opts = {
-  profile = "qwen2.5-coder",
+  profile = "qwen2.5-coder", -- pick your active one
   profiles = {
+    -- Qwen2.5-Coder 3B, infill mode (llama-server assembles the prompt from
+    -- the GGUF's own FIM metadata).
     ["qwen2.5-coder"] = {
       mode = "infill",
       top_p = 0.9,
@@ -59,16 +84,86 @@ opts = {
         ctx = 8192,
       },
     },
+
+    -- Qwen3.5-4B, same Qwen FIM tokenizer family (infill mode). Local-only
+    -- GGUF (no known hf repo), so `source` is pinned to "local". This
+    -- checkpoint's own eos is "<|im_end|>" rather than a FIM-family token, and
+    -- it's prone to looping on already-emitted lines under greedy decoding
+    -- without DRY sampling to break the cycle — see "Repetition controls"
+    -- below for what dry_* does.
+    ["qwen3.5-4b"] = {
+      mode = "infill",
+      top_p = 0.9,
+      stop = { "<|endoftext|>", "<|fim_pad|>", "<|file_sep|>", "<|repo_name|>", "<|im_end|>" },
+      dry_multiplier = 0.8,
+      dry_allowed_length = 1,
+      dry_penalty_last_n = 256,
+      dry_sequence_breakers = { "\n" },
+      server = {
+        gguf = "Qwen3.5-4B-Q6_K.gguf",
+        source = "local",
+        ctx = 8192,
+      },
+    },
+
+    -- Mellum-4b-dpo (StarCoder-tokenizer base), SPM FIM via the shared
+    -- completion builder (mode = "completion", the default). eos is
+    -- <|endoftext|>; the <fim_*>/<filename> entries guard a runaway fill.
+    -- hf-only: demonstrates the `-hf` load path (no local gguf).
+    mellum4b = {
+      stop = { "<fim_prefix>", "<fim_suffix>", "<fim_middle>", "<filename>", "<|endoftext|>" },
+      server = {
+        hf = "JetBrains/Mellum-4b-dpo-all-gguf:Q8_0",
+        ctx = 8192,
+      },
+    },
+
+    -- Mellum2 ...-Instruct, raw FIM (its tokenizer keeps the <fim_*> tokens).
+    -- Its eos is <|im_end|>; <|endoftext|> is kept as a second guard.
+    -- hf-only: demonstrates the `-hf` load path (no local gguf).
+    mellum2 = {
+      stop = { "<fim_prefix>", "<fim_suffix>", "<fim_middle>", "<filename>", "<|im_end|>", "<|endoftext|>" },
+      server = {
+        hf = "JetBrains/Mellum2-12B-A2.5B-Instruct-GGUF-Q6_K:Q6_K",
+        ctx = 8192,
+      },
+    },
   },
 }
 ```
+
+## Repetition controls
+
+`temperature = 0` (the `profile_defaults`) means greedy decoding — deterministic,
+but with no way to escape a cycle once the model starts repeating a line. A few
+optional per-profile fields, sent straight through to llama-server's sampler,
+address that without falling back to a flat `repeat_penalty` (which docks
+*any* recently-seen token, including legitimate code reuse like variable names
+or closing punctuation):
+
+| Field                    | What it does                                                                 |
+| ------------------------ | ----------------------------------------------------------------------------- |
+| `dry_multiplier`         | DRY sampling strength; `0`/omitted disables it (llama-server default: `0`)     |
+| `dry_base`                | DRY penalty growth base (llama-server default: `1.75`)                       |
+| `dry_allowed_length`      | longest repeat allowed before DRY kicks in (llama-server default: `2`)       |
+| `dry_penalty_last_n`      | how far back DRY looks for repeats (llama-server default: `64`)              |
+| `dry_sequence_breakers`   | characters that reset DRY's repeat match (llama-server default: `{"\n", ":", "\"", "*"}`) |
+| `repeat_penalty`          | flat penalty on any recently-seen token; blunt, prefer DRY for code           |
+
+DRY only penalizes tokens that would extend an *already-repeated* n-gram past
+`dry_allowed_length`, so it targets literal loops (the same line generated
+over and over) without touching normal code reuse. One gotcha: the default
+`dry_sequence_breakers` include `"` and `:`, which reset the match mid-line for
+code like `print("done")` — exactly the kind of line these models loop on — so
+a code profile that's still looping with DRY enabled likely needs
+`dry_sequence_breakers = { "\n" }` to narrow the reset to line boundaries only.
 
 ## FIM tokens
 
 Every profile's `stop` list and (for `mode = "completion"`) `tokens` table
 must match the exact marker strings the model was trained on — copied from
-its tokenizer, not guessed. Two token families are in use by the built-in
-profiles:
+its tokenizer, not guessed. Two token families are in use by the example
+profiles above:
 
 | Role                | Mellum (`<fim_prefix>` style)        | Qwen (`<\|fim_prefix\|>` style)     |
 | ------------------- | ------------------------------------- | ------------------------------------ |
@@ -128,14 +223,30 @@ profile provides only one of the two, that one is used regardless of `source`
 
 ```lua
 profiles = {
-  ["mellum2"] = { source = "hf" },  -- always pull this one from HuggingFace
+  ["qwen2.5-coder"] = { source = "hf" },  -- always pull this one from HuggingFace
 }
 ```
 
-Most built-in profiles ship with both `hf` and `gguf`, so by default they run from
-`model_dir` once the files are present, and fall back to HuggingFace otherwise.
-`qwen3.5-4b` is local-only (no known `hf` repo for this GGUF), so it always
-loads from `model_dir` regardless of `source`.
+Most of the example profiles above ship with both `hf` and `gguf`, so by default
+they run from `model_dir` once the files are present, and fall back to
+HuggingFace otherwise. `qwen3.5-4b` is local-only (no known `hf` repo for this
+GGUF), so it always loads from `model_dir` regardless of `source`.
+
+`model_dir` is a single global directory; if your local `.gguf` files live one
+level deeper (e.g. `~/LLM/models/<ModelName>/model.gguf` rather than flat
+`~/LLM/model.gguf`), override `server.model_dir` per profile instead of the
+global one:
+
+```lua
+profiles = {
+  ["qwen3.5-4b"] = { server = { model_dir = "~/LLM/models/Qwen3.5-4B-FIM" } },
+}
+```
+
+A profile pointed at a nonexistent path makes `llama-server` exit immediately
+on load — `:checkhealth local-fim` flags this (`local model file not found`),
+but `require("local-fim.server").ensure()`'s background auto-start does not
+surface the failure, so it can look like the server "just didn't start."
 
 ## Context
 
