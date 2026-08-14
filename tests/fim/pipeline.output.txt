@@ -1,4 +1,4 @@
-# case: pipeline   profile: qwen2.5-coder   mode: infill   endpoint: http://127.0.0.1:8012
+# case: pipeline   profile: qwen3.5-4b   mode: infill   endpoint: http://127.0.0.1:8012
 # deps: 3 dep file(s)
 
 === prompt without deps ===
@@ -58,12 +58,21 @@ def main() -> None:
     print(reply.text)<|fim_middle|>
 
 === completion without deps ===
-send("hello")
+
+    get_greeting()
+
 
 issues: none
 
 === completion with 3 dep file(s) ===
 exchange("hello")
     session.close()
+    print("done")
+    print("end")
+    print("exit")
+    print("bye")
+    print("goodbye")
+    print("farewell")
+
 
 issues: none

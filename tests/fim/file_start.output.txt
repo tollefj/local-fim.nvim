@@ -1,4 +1,4 @@
-# case: file_start   profile: qwen2.5-coder   mode: infill   endpoint: http://127.0.0.1:8012
+# case: file_start   profile: qwen3.5-4b   mode: infill   endpoint: http://127.0.0.1:8012
 # deps: 0 dep file(s)
 
 === prompt without deps ===
@@ -11,13 +11,16 @@
 [unavailable]
 
 === completion without deps ===
-def area(width: float, height: float) -> float:
-    return width * height
+
+def main():
+    width = float(input("Enter width: "))
+    height = float(input("Enter height: "))
+    print(f"Area: {area(width, height)}")
+
+if __name__ == "__main__":
 
 
-issues: 2
-  - echoes suffix line verbatim: "def area(width: float, height: float) -> float:"
-  - echoes suffix line verbatim: "return width * height"
+issues: none
 
 === completion with 0 dep file(s) ===
 [skipped] no deps

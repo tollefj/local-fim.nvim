@@ -1,4 +1,4 @@
-# case: totals   profile: qwen2.5-coder   mode: infill   endpoint: http://127.0.0.1:8012
+# case: totals   profile: qwen3.5-4b   mode: infill   endpoint: http://127.0.0.1:8012
 # deps: totals_deps.py
 
 === prompt without deps ===
@@ -22,11 +22,24 @@ def invoice_total(items: list[dict]) -> float:
     return sum(<|fim_suffix|> for item in items)<|fim_middle|>
 
 === completion without deps ===
-line_total(item)
+
+            item['price'] * item['quantity']
+        
+    return 0.0
+
+
 
 issues: none
 
 === completion with totals_deps.py ===
-line_total(item)
+
+    line_total(item)
+    for item in items
+    )
+    return 0.0
+    return 0
+    return 100.0
+    return 200.0
+
 
 issues: none

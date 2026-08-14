@@ -1,4 +1,4 @@
-# case: repeat_trap   profile: qwen2.5-coder   mode: infill   endpoint: http://127.0.0.1:8012
+# case: repeat_trap   profile: qwen3.5-4b   mode: infill   endpoint: http://127.0.0.1:8012
 # deps: 0 dep file(s)
 
 === prompt without deps ===
@@ -19,7 +19,13 @@
 [unavailable]
 
 === completion without deps ===
-sum([len(item) for item in self.items])
+
+        for item in self.items:
+            total += 100
+        self.items = []
+        return total
+    
+
 
 issues: none
 

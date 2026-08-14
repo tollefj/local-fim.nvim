@@ -1,4 +1,4 @@
-# case: multiline   profile: qwen2.5-coder   mode: infill   endpoint: http://127.0.0.1:8012
+# case: multiline   profile: qwen3.5-4b   mode: infill   endpoint: http://127.0.0.1:8012
 # deps: 0 dep file(s)
 
 === prompt without deps ===
@@ -14,7 +14,13 @@ def average(values: list[float]) -> float:
 [unavailable]
 
 === completion without deps ===
-return [value / max(values) for value in values]
+
+    return [x / max(values) for x in values]
+    
+def main():
+    values = [1, 2, 3, 4, 5]
+    print(normalize(values))
+
 
 issues: none
 

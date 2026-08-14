@@ -1,4 +1,4 @@
-# case: greet   profile: qwen2.5-coder   mode: infill   endpoint: http://127.0.0.1:8012
+# case: greet   profile: qwen3.5-4b   mode: infill   endpoint: http://127.0.0.1:8012
 # deps: greet_deps.py
 
 === prompt without deps ===
@@ -39,11 +39,15 @@ if __name__ == "__main__":
     main()<|fim_middle|>
 
 === completion without deps ===
+
 greet()
+
 
 issues: none
 
 === completion with greet_deps.py ===
+
 greeting()
+
 
 issues: none
