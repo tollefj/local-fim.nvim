@@ -5,8 +5,20 @@ local M = {}
 M.job = nil
 local notified_down = false
 
+-- Repetition-control knobs a profile may opt into; left out of the request
+-- body when unset so llama-server's own defaults apply. See profiles.lua for
+-- what each one does.
+local OPTIONAL_SAMPLING_KEYS = {
+  "repeat_penalty",
+  "dry_multiplier",
+  "dry_base",
+  "dry_allowed_length",
+  "dry_penalty_last_n",
+  "dry_sequence_breakers",
+}
+
 local function sampling(cfg)
-  return {
+  local body = {
     n_predict = cfg.n_predict,
     temperature = cfg.temperature,
     top_k = cfg.top_k,
@@ -16,6 +28,12 @@ local function sampling(cfg)
     t_max_predict_ms = cfg.t_max_predict_ms,
     stream = false,
   }
+  for _, k in ipairs(OPTIONAL_SAMPLING_KEYS) do
+    if cfg[k] ~= nil then
+      body[k] = cfg[k]
+    end
+  end
+  return body
 end
 
 -- /infill: let llama-server assemble the FIM template from the model's own

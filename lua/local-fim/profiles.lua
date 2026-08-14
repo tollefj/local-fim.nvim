@@ -33,6 +33,22 @@ local M = {}
 ---@field stop string[]               -- strings that halt generation
 ---@field tokens? local_fim.Tokens          -- required for "completion" mode; ignored for "infill"
 ---@field server? local_fim.ServerSpec      -- omit to disable auto-start for this profile
+-- Repetition controls, all optional -- omitted fields are left out of the
+-- request body entirely so llama-server's own defaults apply. DRY (dry_*) is
+-- the preferred fix for a model that loops on literal repeated lines: unlike
+-- repeat_penalty it only penalizes tokens that would extend an
+-- already-repeated n-gram, so it doesn't dock legitimate code reuse (variable
+-- names, closing punctuation, etc).
+---@field repeat_penalty? number      -- flat penalty on any recently-seen token; blunt, can hurt code reuse
+---@field dry_multiplier? number      -- DRY strength; 0 or omitted disables it (llama-server default: 0)
+---@field dry_base? number            -- DRY penalty growth base (llama-server default: 1.75)
+---@field dry_allowed_length? integer -- longest repeat allowed before DRY kicks in (llama-server default: 2)
+---@field dry_penalty_last_n? integer -- how far back DRY looks for repeats (llama-server default: 64)
+---@field dry_sequence_breakers? string[] -- chars that reset DRY's repeat match (llama-server default:
+                                          -- {"\n", ":", "\"", "*"} -- the quote/colon defaults reset the
+                                          -- match mid-line for code like `print("done")`, which is exactly
+                                          -- the kind of line these models loop on, so code profiles should
+                                          -- narrow this to just newline
 
 -- Shared baseline. A profile is merged over this, so it only declares deltas.
 ---@type local_fim.Profile
@@ -95,10 +111,23 @@ M.profiles = {
   -- "infill" delegation. Local-only GGUF: no known hf repo, so `gguf` is the
   -- only source and `source` is pinned to "local" regardless of the global
   -- default. ctx assumed at 8192 to match the other profiles.
+  --
+  -- This checkpoint's own eos is "<|im_end|>" (per llama-server /props), not
+  -- one of the FIM-family guard tokens below -- without it in `stop`, and
+  -- with greedy decoding (temperature 0) giving it no way to escape a cycle,
+  -- it was looping on already-emitted lines until n_predict cut it off (see
+  -- tests/fim/pipeline.py, tests/fim/totals.py). DRY targets exactly that: it
+  -- only penalizes tokens that would extend an already-repeated n-gram, so it
+  -- breaks the loop without docking normal code reuse the way a flat
+  -- repeat_penalty would.
   ["qwen3.5-4b"] = {
     mode = "infill",
     top_p = 0.9,
-    stop = { "<|endoftext|>", "<|fim_pad|>", "<|file_sep|>", "<|repo_name|>" },
+    stop = { "<|endoftext|>", "<|fim_pad|>", "<|file_sep|>", "<|repo_name|>", "<|im_end|>" },
+    dry_multiplier = 0.8,
+    dry_allowed_length = 1,
+    dry_penalty_last_n = 256,
+    dry_sequence_breakers = { "\n" },
     server = {
       gguf = "Qwen3.5-4B-Q6_K.gguf",
       source = "local",
@@ -155,6 +184,14 @@ function M.validate(p)
   end
   if p.source ~= nil and p.source ~= "hf" and p.source ~= "local" then
     return false, 'source must be "hf" or "local"'
+  end
+  for _, k in ipairs({ "repeat_penalty", "dry_multiplier", "dry_base", "dry_allowed_length", "dry_penalty_last_n" }) do
+    if p[k] ~= nil and type(p[k]) ~= "number" then
+      return false, (k .. " must be a number")
+    end
+  end
+  if p.dry_sequence_breakers ~= nil and not list_of_strings(p.dry_sequence_breakers) then
+    return false, "dry_sequence_breakers must be a list of strings"
   end
   if p.server ~= nil then
     local s = p.server

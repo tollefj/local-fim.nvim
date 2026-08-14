@@ -52,7 +52,7 @@ end
 -- Build the launch command from the active profile's `server` spec, injecting
 -- the port from `endpoint` so it stays the single source of truth. Returns a
 -- list-form command (argv) ready for vim.system.
---   llama-server <model...> --port <port> -c <ctx>
+--   llama-server <model...> --port <port> -c <ctx> --context-shift
 local function build_cmd(cfg)
   local port = cfg.endpoint:match(":(%d+)")
   if not port then
@@ -67,7 +67,12 @@ local function build_cmd(cfg)
   end
   local cmd = { "llama-server" }
   vim.list_extend(cmd, margs)
-  vim.list_extend(cmd, { "--port", port, "-c", tostring(cfg.server.ctx) })
+  -- context.lua budgets cross-file `extra` context by a ~4-chars/token
+  -- estimate, not an exact token count, so a request's assembled prompt
+  -- (prefix + suffix + extra) can occasionally exceed `ctx`. --context-shift
+  -- (off by default) makes llama-server discard the oldest context and keep
+  -- going in that case instead of erroring or silently truncating mid-token.
+  vim.list_extend(cmd, { "--port", port, "-c", tostring(cfg.server.ctx), "--context-shift" })
   return cmd
 end
 
