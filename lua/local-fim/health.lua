@@ -1,6 +1,5 @@
 local M = {}
 
--- `:checkhealth local-fim` — confirms the server is reachable and reports the model.
 function M.check()
   local cfg = require("local-fim").config
   vim.health.start("local-fim")

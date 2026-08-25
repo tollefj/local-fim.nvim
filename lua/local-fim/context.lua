@@ -1,8 +1,5 @@
 local M = {}
 
--- Ring buffer of context chunks gathered from other buffers. Each entry is
--- { filename = <relative path>, text = <joined lines> }. Most-recently-seen
--- chunks live at the front; the list is capped at config.ring.max_chunks.
 M.chunks = {}
 
 local function relpath(bufnr)
@@ -23,8 +20,6 @@ local function is_real_buffer(bufnr)
   return vim.api.nvim_buf_get_name(bufnr) ~= ""
 end
 
--- Capture an up-to-chunk_lines slice of `bufnr` and push it to the front of
--- the ring, evicting any previous chunk for the same file and trimming to cap.
 function M.capture(bufnr, cfg)
   if not is_real_buffer(bufnr) then
     return
@@ -51,14 +46,10 @@ function M.capture(bufnr, cfg)
 end
 
 local function entry_len(filename, text)
-  return #filename + #text + 4 -- markers + newlines, roughly
+  return #filename + #text + 4
 end
 
--- Merge LSP definitions with ring chunks under one ~token budget. LSP entries
--- get first claim (highest relevance); ring chunks fill the remainder, skipping
--- the current file and any file an LSP entry already covers. The returned list
--- is ordered [ring..., LSP...] so the most relevant context sits last, nearest
--- the FIM region in the assembled prompt.
+-- extra is ordered [ring..., LSP...] so LSP context sits nearest the FIM point.
 local function assemble_extra(lsp_entries, current, cfg)
   local budget = (cfg.max_extra_tokens or 2048) * 4
   local used, seen = 0, {}
@@ -93,14 +84,9 @@ local function assemble_extra(lsp_entries, current, cfg)
   return extra
 end
 
--- Build the FIM context for the current cursor position and pass it to
--- `callback` (async, because LSP definition lookups are async):
---   prefix : text before the cursor (current line + up to max_prefix_lines above)
---   suffix : text after the cursor  (current line + up to max_suffix_lines below)
---   extra  : LSP definitions for nearby symbols + ring-buffer chunks, budgeted
 function M.gather(cfg, callback)
   local bufnr = vim.api.nvim_get_current_buf()
-  local row, col = unpack(vim.api.nvim_win_get_cursor(0)) -- row is 1-based
+  local row, col = unpack(vim.api.nvim_win_get_cursor(0))
   row = row - 1
 
   local prefix_start = math.max(0, row - cfg.max_prefix_lines)

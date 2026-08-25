@@ -1,12 +1,5 @@
--- Cross-file context from the language server. On a completion trigger we take
--- the identifiers the cursor is typing against, ask the LSP for their
--- definitions, and return the enclosing code regions as { filename, text }
--- entries for the FIM prompt's `extra` list. Additive to the ring buffer; fully
--- async with a hard deadline so a slow or absent server never blocks a request.
 local M = {}
 
--- Treesitter leaf types we treat as resolvable symbols. Names vary per grammar
--- but these cover the common identifier/reference nodes.
 local IDENT_TYPES = {
   identifier = true,
   type_identifier = true,
@@ -17,9 +10,7 @@ local IDENT_TYPES = {
   constant = true,
 }
 
--- Walk named/anonymous children overlapping [start_row, end_row], collecting
--- identifier-like leaves. Children are positionally ordered, so we stop once a
--- child begins past the region.
+-- children are positionally ordered, so we stop once one begins past the region
 local function collect_idents(node, start_row, end_row, end_col, acc)
   for child in node:iter_children() do
     local sr, sc, er = child:range()
@@ -38,8 +29,6 @@ local function collect_idents(node, start_row, end_row, end_col, acc)
   end
 end
 
--- Fallback when no treesitter parser is available: regex word starts in the
--- prefix region. The LSP self-filters non-symbols by returning no definition.
 local function naive_positions(bufnr, row, col, start_row)
   local lines = vim.api.nvim_buf_get_lines(bufnr, start_row, row + 1, false)
   local positions = {}
@@ -76,7 +65,6 @@ local function candidate_positions(bufnr, row, col, cfg)
   return positions
 end
 
--- Nearest the cursor first, deduped by name, capped to max_symbols.
 local function dedupe_and_cap(positions, cap)
   table.sort(positions, function(a, b)
     if a.row ~= b.row then
@@ -97,27 +85,22 @@ local function dedupe_and_cap(positions, cap)
   return out
 end
 
--- When the cursor sits just after a member operator (`transport.`, `a?.b`,
--- `p->x`, `T::y`), recover the receiver identifier and its position so we can
--- resolve its *type* and feed the model the members available on it. The line
--- may be mid-edit (a partially typed member), so this scans text rather than
--- the syntax tree. Returns { row, col, name } or nil.
+-- recovers the receiver of a member access (`transport.`, `a?.b`, `p->x`, `T::y`)
+-- so its type definition can be resolved too; nil if the receiver isn't a plain identifier
 local function member_receiver(bufnr, row, col)
   local line = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1] or ""
-  local before = line:sub(1, col):gsub("[%w_]*$", "") -- drop the partial member being typed
+  local before = line:sub(1, col):gsub("[%w_]*$", "")
   if not (before:match("%.%s*$") or before:match("%-%>%s*$") or before:match("::%s*$")) then
     return nil
   end
-  local recv = before:gsub("[%s%.:>%-%?]*$", "") -- strip the operator and trailing space
+  local recv = before:gsub("[%s%.:>%-%?]*$", "")
   local s = recv:find("[%w_]+$")
   if not s then
-    return nil -- receiver is not a plain identifier (e.g. a call result)
+    return nil
   end
   return { row = row, col = s - 1, name = recv:sub(s) }
 end
 
--- A definition result may be a Location or a LocationLink. Pull the target uri
--- and the start of the most specific range we have.
 local function loc_target(loc)
   local uri = loc.uri or loc.targetUri
   local range = loc.range or loc.targetSelectionRange or loc.targetRange
@@ -127,7 +110,6 @@ local function loc_target(loc)
   return uri, range.start.line, range.start.character
 end
 
--- Definition-ish ancestor node types, matched as substrings across grammars.
 local function is_definition_node(t)
   return t:find("function")
     or t:find("method")
@@ -140,8 +122,6 @@ local function is_definition_node(t)
     or t:find("type_alias")
 end
 
--- Extract the enclosing definition region at (defrow, defcol) in tbuf, capped to
--- max_def_lines. Falls back to a fixed window when treesitter can't help.
 local function enclosing_text(tbuf, defrow, defcol, cfg)
   local total = vim.api.nvim_buf_line_count(tbuf)
   local ok, parser = pcall(vim.treesitter.get_parser, tbuf)
@@ -161,9 +141,6 @@ local function enclosing_text(tbuf, defrow, defcol, cfg)
   return table.concat(vim.api.nvim_buf_get_lines(tbuf, defrow, er, false), "\n")
 end
 
--- Turn raw definition locations into deduped { filename, text } entries. Skips
--- targets in the source buffer (already covered by prefix/suffix in v1). `seen`
--- is shared across calls so a type-def doesn't duplicate a plain def.
 local function build_entries(locs, src_bufnr, cfg, seen)
   local src_name = vim.api.nvim_buf_get_name(src_bufnr)
   local entries = {}
@@ -186,9 +163,7 @@ local function build_entries(locs, src_bufnr, cfg, seen)
   return entries
 end
 
--- Resolve definitions for the symbols around (row, col) and call back with a
--- list of { filename, text } entries. Always calls back exactly once: on all
--- responses, on the deadline, or immediately when there is nothing to do.
+-- always calls back exactly once: on all responses, on the deadline, or immediately if nothing to do
 function M.collect(cfg, bufnr, row, col, callback)
   if not (cfg.lsp and cfg.lsp.enabled) then
     return callback({})
@@ -197,8 +172,6 @@ function M.collect(cfg, bufnr, row, col, callback)
     return callback({})
   end
 
-  -- Definitions for the nearby identifiers, plus the *type* definition of a
-  -- member-access receiver so the model sees what `receiver.` can call.
   local positions = dedupe_and_cap(candidate_positions(bufnr, row, col, cfg), cfg.lsp.max_symbols)
   local requests = {}
   for _, pos in ipairs(positions) do
@@ -220,8 +193,6 @@ function M.collect(cfg, bufnr, row, col, callback)
       return
     end
     done = true
-    -- Shared dedupe; type-def entries come last so the receiver's members sit
-    -- nearest the FIM region in the assembled prompt.
     local seen = {}
     local entries = build_entries(def_locs, bufnr, cfg, seen)
     for _, e in ipairs(build_entries(type_locs, bufnr, cfg, seen)) do

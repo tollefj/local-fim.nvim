@@ -1,13 +1,8 @@
 local M = {}
 
--- The single in-flight request handle, if any. A new request cancels the
--- previous one (debounce-by-cancel) so only the latest cursor position wins.
 M.job = nil
 local notified_down = false
 
--- Repetition-control knobs a profile may opt into; left out of the request
--- body when unset so llama-server's own defaults apply. See profiles.lua for
--- what each one does.
 local OPTIONAL_SAMPLING_KEYS = {
   "repeat_penalty",
   "dry_multiplier",
@@ -36,8 +31,6 @@ local function sampling(cfg)
   return body
 end
 
--- /infill: let llama-server assemble the FIM template from the model's own
--- special tokens. Works only when the GGUF carries FIM-token metadata.
 local function infill_request(ctx, cfg)
   local body = sampling(cfg)
   body.input_prefix = ctx.prefix
@@ -49,9 +42,6 @@ local function infill_request(ctx, cfg)
   return "/infill", body
 end
 
--- /completion: build the model's exact SPM prompt ourselves. FIM marker
--- strings come from cfg.tokens (per profile). Context files are prepended with
--- the filename marker, then the current file in suffix/prefix/middle order.
 local function completion_request(ctx, cfg)
   local t = cfg.tokens
   local parts = {}
@@ -77,11 +67,6 @@ function M.cancel()
   end
 end
 
--- POST a FIM request. Calls on_done(content, nil, meta) with the completion
--- string on success, or on_done(nil, err) on failure. `meta` carries the
--- request body we sent and the full decoded server response (which, in
--- llama.cpp, includes the assembled `prompt`); production callers can ignore
--- it. Endpoint and body shape are chosen by cfg.mode ("completion" | "infill").
 function M.infill(ctx, cfg, on_done)
   M.cancel()
 

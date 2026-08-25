@@ -1,66 +1,41 @@
--- Per-model parameter bundles. One llama-server runs on `endpoint`; you swap
--- the loaded model locally and point `profile` at the matching bundle so the
--- stop set (notably the eos guard) tracks the model you're actually serving.
---
--- This plugin ships with no built-in profiles: model paths, quant choices,
--- and sampling tweaks are personal to your machine, not something a published
--- package should hardcode. Define yours in your own Neovim config via
--- `opts.profiles` at setup() -- see the README's "Profiles" section for
--- ready-to-copy examples (Mellum and Qwen2.5-Coder/Qwen3.5 families). Declare
--- only what differs from `profile_defaults` below; everything you omit is
--- inherited.
-
 local M = {}
 
 ---@class local_fim.Tokens
----@field filename string  -- marker prepended to each context file's name
----@field prefix string    -- FIM prefix token
----@field suffix string    -- FIM suffix token
----@field middle string    -- FIM middle token
+---@field filename string
+---@field prefix string
+---@field suffix string
+---@field middle string
 
 ---@class local_fim.ServerSpec
--- Identify the model with `hf`, `gguf`, or both. When both are set, the local
--- file wins if it's present on disk; otherwise it downloads via `hf`.
----@field hf? string         -- HuggingFace repo, "<user>/<model>[:quant]"; loaded with `-hf`
----@field gguf? string       -- filename under `model_dir`; loaded with `-m model_dir/<gguf>`
----@field model_dir? string     -- override the global model_dir for this profile
----@field ctx integer        -- context size, passed as `-c`
+---@field hf? string
+---@field gguf? string
+---@field model_dir? string
+---@field ctx integer
 
 ---@class local_fim.Profile
----@field mode "completion"|"infill"  -- "completion": build the SPM prompt locally; "infill": delegate to /infill
+---@field mode "completion"|"infill"
 ---@field n_predict integer
 ---@field temperature number
 ---@field top_k integer
 ---@field top_p number
 ---@field t_max_predict_ms integer
----@field stop string[]               -- strings that halt generation
----@field tokens? local_fim.Tokens          -- required for "completion" mode; ignored for "infill"
----@field server? local_fim.ServerSpec      -- omit to disable auto-start for this profile
--- Repetition controls, all optional -- omitted fields are left out of the
--- request body entirely so llama-server's own defaults apply. DRY (dry_*) is
--- the preferred fix for a model that loops on literal repeated lines: unlike
--- repeat_penalty it only penalizes tokens that would extend an
--- already-repeated n-gram, so it doesn't dock legitimate code reuse (variable
--- names, closing punctuation, etc).
----@field repeat_penalty? number      -- flat penalty on any recently-seen token; blunt, can hurt code reuse
----@field dry_multiplier? number      -- DRY strength; 0 or omitted disables it (llama-server default: 0)
----@field dry_base? number            -- DRY penalty growth base (llama-server default: 1.75)
----@field dry_allowed_length? integer -- longest repeat allowed before DRY kicks in (llama-server default: 2)
----@field dry_penalty_last_n? integer -- how far back DRY looks for repeats (llama-server default: 64)
----@field dry_sequence_breakers? string[] -- chars that reset DRY's repeat match (llama-server default:
-                                          -- {"\n", ":", "\"", "*"} -- the quote/colon defaults reset the
-                                          -- match mid-line for code like `print("done")`, which is exactly
-                                          -- the kind of line these models loop on, so code profiles should
-                                          -- narrow this to just newline
+---@field stop string[]
+---@field tokens? local_fim.Tokens
+---@field server? local_fim.ServerSpec
+---@field repeat_penalty? number
+---@field dry_multiplier? number
+---@field dry_base? number
+---@field dry_allowed_length? integer
+---@field dry_penalty_last_n? integer
+---@field dry_sequence_breakers? string[]
 
--- Shared baseline. A profile is merged over this, so it only declares deltas.
 ---@type local_fim.Profile
 M.profile_defaults = {
   mode = "completion",
-  n_predict = 128,
-  temperature = 0,
+  n_predict = 256,
+  temperature = 0.5,
   top_k = 40,
-  top_p = 0.99,
+  top_p = 0.9,
   t_max_predict_ms = 1000,
   tokens = {
     filename = "<filename>",
@@ -70,13 +45,9 @@ M.profile_defaults = {
   },
 }
 
--- No bundled models -- add yours via `opts.profiles` in your Neovim config.
--- See the README for the Mellum/Qwen2.5-Coder/Qwen3.5 examples that used to
--- live here.
 ---@type table<string, local_fim.Profile>
 M.profiles = {}
 
--- Merge `profile_defaults` under a single profile table.
 ---@param profile local_fim.Profile
 ---@return local_fim.Profile
 function M.resolve(profile)
@@ -95,8 +66,6 @@ local function list_of_strings(t)
   return true
 end
 
--- Validate a resolved profile. Returns true, or false plus a message naming
--- the offending field.
 ---@param p local_fim.Profile
 ---@return boolean ok, string? err
 function M.validate(p)

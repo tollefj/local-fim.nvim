@@ -2,9 +2,6 @@ local M = {}
 
 local ns = vim.api.nvim_create_namespace("local-fim")
 
--- The currently displayed suggestion, or nil. Bound to the buffer and cursor
--- position it was generated for, so a stale suggestion is never accepted after
--- the cursor moves.
 M.current = nil
 
 local highlight = "Comment"
@@ -20,8 +17,6 @@ function M.clear()
   end
 end
 
--- Render `text` as ghost text at the cursor. The first line sits inline (your
--- real suffix is pushed right); any further lines render below as virt_lines.
 function M.show(text)
   M.clear()
   if not text or text == "" then
@@ -51,7 +46,6 @@ function M.show(text)
   M.current = { bufnr = bufnr, row = row, col = col, text = text, extmark = extmark }
 end
 
--- True only when a suggestion exists and the cursor is still where it was shown.
 function M.has_suggestion()
   if not M.current then
     return false
@@ -63,7 +57,6 @@ function M.has_suggestion()
   return (row - 1) == M.current.row and col == M.current.col
 end
 
--- Insert the suggestion at its anchor position and clear the ghost text.
 function M.accept()
   if not M.has_suggestion() then
     return false
