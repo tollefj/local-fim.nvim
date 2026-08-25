@@ -12,41 +12,29 @@ local function join_path(dir, file)
 end
 
 -- Resolve the model-identity args for `llama-server` from a profile's `server`
--- spec. Precedence: a raw `model` array wins; otherwise pick between `hf` and
--- `gguf` by the resolved `source` (server-level override, then global). When
--- only one of hf/gguf exists it is used regardless of `source`. Pure: returns
--- the argv plus an optional note string (caller decides how to surface it) so
--- callers other than launch (e.g. health) can reuse it without side effects.
---   { "-hf", "<repo>" }  |  { "-m", "<model_dir>/<gguf>" }  |  <model verbatim>
+-- spec: a local `gguf` is preferred when the file already exists on disk
+-- (fastest, no network); otherwise falls back to downloading via `hf`. When
+-- only `gguf` is set (no `hf` fallback), its path is returned regardless, so
+-- health.lua can surface a "file not found" warning. Pure: no side effects, so
+-- callers other than launch (e.g. health) can reuse it.
+--   { "-m", "<model_dir>/<gguf>" }  |  { "-hf", "<repo>" }
 ---@param cfg local_fim.Config
----@return string[]? args, string? note_or_err  -- note when args set, err when nil
+---@return string[]? args, string? err
 function M.model_args(cfg)
   local s = cfg.server
   if not s then
     return nil, "profile has no server spec"
   end
-  if s.model then
-    return s.model
+  if not s.hf and not s.gguf then
+    return nil, "server must define hf and/or gguf"
   end
-  local source = s.source or cfg.source or "hf"
-  local dir = s.model_dir or cfg.model_dir or "~/LLM"
-  if s.hf and s.gguf then
-    if source == "local" then
-      return { "-m", join_path(dir, s.gguf) }
+  if s.gguf then
+    local path = join_path(s.model_dir or cfg.model_dir or "~/LLM", s.gguf)
+    if not s.hf or vim.fn.filereadable(path) == 1 then
+      return { "-m", path }
     end
-    return { "-hf", s.hf }
-  elseif s.gguf then
-    local note = source == "hf"
-      and ("profile %q has no hf repo; using local gguf"):format(cfg.profile)
-      or nil
-    return { "-m", join_path(dir, s.gguf) }, note
-  elseif s.hf then
-    local note = source == "local"
-      and ("profile %q has no local gguf; using hf repo"):format(cfg.profile)
-      or nil
-    return { "-hf", s.hf }, note
   end
-  return nil, "server must define at least one of hf, gguf, or model"
+  return { "-hf", s.hf }
 end
 
 -- Build the launch command from the active profile's `server` spec, injecting
@@ -58,12 +46,9 @@ local function build_cmd(cfg)
   if not port then
     return nil, "could not parse port from endpoint: " .. tostring(cfg.endpoint)
   end
-  local margs, note = M.model_args(cfg)
+  local margs, err = M.model_args(cfg)
   if not margs then
-    return nil, note
-  end
-  if note then
-    vim.notify("local-fim: " .. note, vim.log.levels.WARN)
+    return nil, err
   end
   local cmd = { "llama-server" }
   vim.list_extend(cmd, margs)

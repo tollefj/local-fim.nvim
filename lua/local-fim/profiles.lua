@@ -19,12 +19,10 @@ local M = {}
 ---@field middle string    -- FIM middle token
 
 ---@class local_fim.ServerSpec
--- Identify the model in one to three ways; presence gates availability and the
--- resolved `source` is the tie-breaker only when both `hf` and `gguf` are set.
+-- Identify the model with `hf`, `gguf`, or both. When both are set, the local
+-- file wins if it's present on disk; otherwise it downloads via `hf`.
 ---@field hf? string         -- HuggingFace repo, "<user>/<model>[:quant]"; loaded with `-hf`
 ---@field gguf? string       -- filename under `model_dir`; loaded with `-m model_dir/<gguf>`
----@field model? string[]    -- raw llama-server args; if set, used verbatim and wins over hf/gguf
----@field source? "hf"|"local"  -- override the global source for this profile
 ---@field model_dir? string     -- override the global model_dir for this profile
 ---@field ctx integer        -- context size, passed as `-c`
 
@@ -124,9 +122,6 @@ function M.validate(p)
       end
     end
   end
-  if p.source ~= nil and p.source ~= "hf" and p.source ~= "local" then
-    return false, 'source must be "hf" or "local"'
-  end
   for _, k in ipairs({ "repeat_penalty", "dry_multiplier", "dry_base", "dry_allowed_length", "dry_penalty_last_n" }) do
     if p[k] ~= nil and type(p[k]) ~= "number" then
       return false, (k .. " must be a number")
@@ -140,20 +135,14 @@ function M.validate(p)
     if type(s) ~= "table" then
       return false, "server must be a table"
     end
-    if s.hf == nil and s.gguf == nil and s.model == nil then
-      return false, "server must define at least one of hf, gguf, or model"
+    if s.hf == nil and s.gguf == nil then
+      return false, "server must define hf and/or gguf"
     end
     if s.hf ~= nil and type(s.hf) ~= "string" then
       return false, "server.hf must be a string"
     end
     if s.gguf ~= nil and type(s.gguf) ~= "string" then
       return false, "server.gguf must be a string"
-    end
-    if s.model ~= nil and (not list_of_strings(s.model) or #s.model == 0) then
-      return false, "server.model must be a non-empty list of strings"
-    end
-    if s.source ~= nil and s.source ~= "hf" and s.source ~= "local" then
-      return false, 'server.source must be "hf" or "local"'
     end
     if type(s.ctx) ~= "number" then
       return false, "server.ctx must be a number"
